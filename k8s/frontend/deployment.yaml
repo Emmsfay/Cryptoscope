@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: cryptoscope
+  labels:
+    app: frontend
+    project: cryptoscope
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: frontend
+        project: cryptoscope
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: frontend
+          # Replace with your actual ECR URL
+          image: 757760338065.dkr.ecr.us-east-1.amazonaws.com/cryptoscope-frontend:fixed
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          securityContext:
+            runAsUser: 0 # run as root — allows nginx to bind port 80
+            runAsGroup: 0
+
+          # nginx is very lightweight — low resource requests are fine
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - frontend
+                topologyKey: kubernetes.io/hostname

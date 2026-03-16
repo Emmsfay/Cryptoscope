@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cryptoscope
+  labels:
+    app: backend
+    project: cryptoscope
+spec:
+  # ClusterIP = internal only, not reachable from outside the cluster
+  # The frontend (nginx) proxies /api requests to this service
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP

@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cryptoscope
+  labels:
+    app: backend
+    project: cryptoscope
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  # Rolling update — replace pods one at a time, zero downtime
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1 # allow 1 extra pod during update
+      maxUnavailable: 0 # never take a pod down before new one is ready
+  template:
+    metadata:
+      labels:
+        app: backend
+        project: cryptoscope
+    spec:
+      # Graceful shutdown — give uvicorn time to finish in-flight requests
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: backend
+          # Replace with your actual ECR URL after terraform apply
+          # Format: <account_id>.dkr.ecr.us-east-1.amazonaws.com/cryptoscope-backend:<tag>
+          image: 757760338065.dkr.ecr.us-east-1.amazonaws.com/cryptoscope-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: LOG_LEVEL
+              value: "info"
+
+          # Resource limits — critical for HPA to work correctly
+          # requests = what K8s reserves on the node
+          # limits = hard cap the container cannot exceed
+          resources:
+            requests:
+              cpu: "100m" # 0.1 CPU core
+              memory: "128Mi"
+            limits:
+              cpu: "500m" # 0.5 CPU core
+              memory: "256Mi"
+
+          # Liveness probe — if this fails, K8s restarts the container
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # Readiness probe — if this fails, K8s stops sending traffic to this pod
+          # This is what makes rolling updates safe
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Startup probe — gives the app time to start before liveness kicks in
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 10
+            periodSeconds: 5
+
+      # Spread pods across nodes for resilience
+      # If node A goes down, node B still has a running pod
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - backend
+                topologyKey: kubernetes.io/hostname
