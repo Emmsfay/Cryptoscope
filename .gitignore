@@ -27,3 +27,4 @@ dist/
 
 # Docker
 *.log
+*:Zone.Identifier
