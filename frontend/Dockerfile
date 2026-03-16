@@ -3,41 +3,32 @@ FROM node:20-alpine AS builder
 
 WORKDIR /build
 
-# Copy package files first — Docker caches this layer
-# so npm install only reruns when dependencies change
 COPY package.json package-lock.json* ./
-
 RUN npm ci --frozen-lockfile
 
-# Copy source and build
 COPY . .
-
-# VITE_API_URL is intentionally NOT set at build time.
-# The Vite proxy handles /api routing at runtime — no hardcoded URLs in the bundle.
 RUN npm run build
 
 
 # ── Stage 2: nginx static server ──────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
-# Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy our custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/app.conf
-
-# Copy the built React app from builder stage
 COPY --from=builder /build/dist /usr/share/nginx/html
 
-# Security: nginx runs as non-root (nginx user already exists in the base image)
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
+# Fix all permission issues for rootless nginx in one layer:
+# 1. Move nginx.pid to /tmp (writable by all users)
+# 2. Remove the "user nginx;" directive (irrelevant when not root)
+# 3. Fix ownership on all dirs nginx needs to write to
+RUN sed -i 's|pid\s*/run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && \
+    sed -i '/^user /d' /etc/nginx/nginx.conf && \
+    chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/cache/nginx && \
     chown -R nginx:nginx /var/log/nginx && \
-    touch /var/run/nginx.pid && \
-    chown nginx:nginx /var/run/nginx.pid
+    chmod -R 755 /var/cache/nginx
 
 USER nginx
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
