@@ -1,0 +1,133 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: cryptoscope-dev-cluster
+  ECR_BACKEND: cryptoscope-backend
+  ECR_FRONTEND: cryptoscope-frontend
+
+jobs:
+  # ── Job 1: Run on every PR — lint and test only, never deploys ─────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Lint backend
+        run: |
+          pip install ruff
+          ruff check backend/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+  # ── Job 2: Build, push, deploy — only runs on push to main ────────────────
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: test # only runs if test job passes
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      id-token: write # required for OIDC auth with AWS
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND }}:${{ env.IMAGE_TAG }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND }}:latest
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND }}:latest
+          cache-to: type=inline
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND }}:${{ env.IMAGE_TAG }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND }}:latest
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND }}:latest
+          cache-to: type=inline
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER }}
+
+      - name: Deploy to EKS
+        run: |
+          kubectl set image deployment/backend \
+            backend=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND }}:${{ env.IMAGE_TAG }} \
+            -n cryptoscope
+
+          kubectl set image deployment/frontend \
+            frontend=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND }}:${{ env.IMAGE_TAG }} \
+            -n cryptoscope
+
+          kubectl rollout status deployment/backend -n cryptoscope --timeout=300s
+          kubectl rollout status deployment/frontend -n cryptoscope --timeout=300s
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster:** \`${{ env.EKS_CLUSTER }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend:** \`${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND }}:${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend:** \`${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND }}:${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+
