@@ -1,5 +1,4 @@
 import httpx
-from typing import
 from app.models.coin import CoinPrice, CoinDetail, MarketChart
 
 
