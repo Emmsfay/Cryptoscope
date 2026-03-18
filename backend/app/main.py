@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import httpx
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.routers import prices, coins
 from app.services.coingecko import CoinGeckoService
@@ -32,6 +33,9 @@ app.add_middleware(
 
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(coins.router, prefix="/api/coins", tags=["coins"])
+
+# Expose /metrics endpoint for Prometheus scraping
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")

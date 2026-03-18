@@ -1,0 +1,75 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cryptoscope-alerts
+  namespace: cryptoscope
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cryptoscope.availability
+      interval: 30s
+      rules:
+        # Fire if no healthy backend pods for 2 minutes
+        - alert: BackendDown
+          expr: |
+            count(kube_pod_status_ready{namespace="cryptoscope",pod=~"backend-.*",condition="true"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CryptoScope backend has no healthy pods"
+            description: "All backend pods have been unavailable for more than 2 minutes."
+
+        # Fire if error rate exceeds 5%
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="cryptoscope",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{namespace="cryptoscope"}[5m])) * 100 > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate on CryptoScope API"
+            description: "Error rate is {{ $value | printf \"%.2f\" }}% over the last 5 minutes."
+
+        # Fire if p95 latency exceeds 2 seconds
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{namespace="cryptoscope"}[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High API latency on CryptoScope"
+            description: "p95 latency is {{ $value | printf \"%.2f\" }}s — CoinGecko may be slow."
+
+    - name: cryptoscope.resources
+      interval: 60s
+      rules:
+        # Fire if a pod is restarting frequently
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="cryptoscope"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash looping"
+            description: "Pod has restarted {{ $value }} times in the last 15 minutes."
+
+        # Fire if HPA is at maximum replicas (capacity pressure)
+        - alert: HPAAtMaxReplicas
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="cryptoscope"}
+            ==
+            kube_horizontalpodautoscaler_spec_max_replicas{namespace="cryptoscope"}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA {{ $labels.horizontalpodautoscaler }} is at max replicas"
+            description: "Consider increasing max replicas or node capacity."

@@ -1,0 +1,91 @@
+# monitoring/prometheus-values.yaml
+# Helm values for kube-prometheus-stack
+# Tuned for t3.small nodes — minimal resource usage
+
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+
+grafana:
+  adminPassword: "cryptoscope-admin"   # change this in production
+  persistence:
+    enabled: false                      # no PVC needed for learning
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+  # Auto-load our custom dashboard
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: cryptoscope
+          orgId: 1
+          folder: CryptoScope
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/cryptoscope
+
+  dashboardsConfigMaps:
+    cryptoscope: "cryptoscope-dashboard"
+
+  grafana.ini:
+    analytics:
+      check_for_updates: false
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    # Scrape ALL namespaces — picks up our FastAPI /metrics endpoint
+    podMonitorNamespaceSelector: {}
+    podMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+    ruleNamespaceSelector: {}
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# Reduce resource usage on small nodes
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+nodeExporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
