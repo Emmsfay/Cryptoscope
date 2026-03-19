@@ -113,6 +113,19 @@ cryptoscope/
 
 ---
 
+## Images
+
+<img width="1920" height="864" alt="Screenshot (234)" src="https://github.com/user-attachments/assets/be6ac0e1-de78-4d82-a45c-ae3f7a7a7ca3" />
+
+<img width="1920" height="654" alt="Screenshot (275)" src="https://github.com/user-attachments/assets/e9edb4bc-71ed-49d4-8cb7-e5b6b88ae695" />
+
+
+<img width="1912" height="883" alt="Screenshot (273)" src="https://github.com/user-attachments/assets/7e138213-89dd-4cb0-9eb5-91e2fc5ec5be" />
+
+<img width="1920" height="873" alt="Screenshot (268)" src="https://github.com/user-attachments/assets/d577d749-374f-44b2-a0e3-6ad990969ecc" />
+
+---
+
 ## Phase 1 — Application
 
 ### What was built
@@ -318,16 +331,6 @@ kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
 
 ---
 
-## Images
-
-<img width="1920" height="864" alt="Screenshot (234)" src="https://github.com/user-attachments/assets/be6ac0e1-de78-4d82-a45c-ae3f7a7a7ca3" />
-
-<img width="1920" height="654" alt="Screenshot (275)" src="https://github.com/user-attachments/assets/e9edb4bc-71ed-49d4-8cb7-e5b6b88ae695" />
-
-
-<img width="1912" height="883" alt="Screenshot (273)" src="https://github.com/user-attachments/assets/7e138213-89dd-4cb0-9eb5-91e2fc5ec5be" />
-
-<img width="1920" height="873" alt="Screenshot (268)" src="https://github.com/user-attachments/assets/d577d749-374f-44b2-a0e3-6ad990969ecc" />
 
 
 ## Prerequisites
